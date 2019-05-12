@@ -24,11 +24,55 @@ class State:
     state: int = 0
 
 
-class Synthetizer(design.Ui_MainWindow, QtWidgets.QMainWindow):
+class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
     def __init__(self):
-        super.__init__()
+        super().__init__()
         self.setupUi(self)
         self.state = State(state=0)
+
+        self.set_hand_active()
+
+    def set_hand_state(self, state: bool):
+        """
+        sets state status to all objects of hand mode
+        :param state: state of objects
+        :return:
+        """
+        self.BtnSetCalTable.setEnabled(state)
+        self.BtnDeleteCalTable.setEnabled(state)
+        self.BtnSetDACValue.setEnabled(state)
+        self.BtnSetFine.setEnabled(state)
+        self.BtnSetRough.setEnabled(state)
+        self.SpinDACValue.setEnabled(state)
+        self.SpinFine.setEnabled(state)
+        self.SpinRough.setEnabled(state)
+
+    def set_auto_state(self, state: bool):
+        """
+        sets state status to all objects of auto mode
+        :param state: state of objects
+        :return:
+        """
+        self.BtnSetTime.setEnabled(state)
+        self.BtnSetFreqFile.setEnabled(state)
+        self.BtnDeleteFreqfile.setEnabled(state)
+        self.BtnStop.setEnabled(state)
+
+    def set_hand_active(self):
+        """
+        sets hand mode to ui
+        :return:
+        """
+        self.set_auto_state(False)
+        self.set_hand_state(True)
+
+    def set_auto_active(self):
+        """
+        sets auto mode to ui
+        :return:
+        """
+        self.set_hand_state(False)
+        self.set_auto_state(True)
 
 
 @logger.catch
