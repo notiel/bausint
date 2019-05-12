@@ -16,45 +16,48 @@
   <widget class="QWidget" name="centralwidget">
    <layout class="QGridLayout" name="gridLayout">
     <item row="1" column="0" colspan="6">
-     <widget class="QLabel" name="label">
+     <widget class="QLabel" name="LblDescr">
       <property name="text">
        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:12pt;&quot;&gt;Выбрано устройство 1. Устройство работает в режиме ручного управления. &lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
       </property>
      </widget>
     </item>
     <item row="2" column="0">
-     <widget class="QLabel" name="label_2">
+     <widget class="QLabel" name="LblList">
       <property name="text">
        <string>Список устройств:</string>
       </property>
      </widget>
     </item>
     <item row="2" column="3" colspan="2">
-     <widget class="QPushButton" name="pushButton_2">
+     <widget class="QPushButton" name="BtnRescan">
       <property name="text">
        <string>Повторный поиск</string>
       </property>
      </widget>
     </item>
     <item row="2" column="5">
-     <widget class="QPushButton" name="pushButton_3">
+     <widget class="QPushButton" name="BtnChangState">
       <property name="text">
        <string>Сменить режим</string>
       </property>
      </widget>
     </item>
     <item row="2" column="1">
-     <widget class="QComboBox" name="comboBox"/>
+     <widget class="QComboBox" name="CBDevices"/>
     </item>
     <item row="2" column="2">
-     <widget class="QPushButton" name="pushButton">
+     <widget class="QPushButton" name="BtnChangeDevice">
+      <property name="enabled">
+       <bool>false</bool>
+      </property>
       <property name="text">
        <string>Сменить устройство</string>
       </property>
      </widget>
     </item>
     <item row="3" column="3" colspan="3">
-     <widget class="QGroupBox" name="groupBox_2">
+     <widget class="QGroupBox" name="GBAuto">
       <property name="font">
        <font>
         <pointsize>10</pointsize>
@@ -65,7 +68,7 @@
       </property>
       <layout class="QGridLayout" name="gridLayout_3">
        <item row="3" column="0">
-        <widget class="QPushButton" name="pushButton_9">
+        <widget class="QPushButton" name="BtnStop">
          <property name="font">
           <font>
            <pointsize>8</pointsize>
@@ -77,7 +80,7 @@
         </widget>
        </item>
        <item row="1" column="0">
-        <widget class="QPushButton" name="pushButton_10">
+        <widget class="QPushButton" name="BtnSetFreqFile">
          <property name="font">
           <font>
            <pointsize>8</pointsize>
@@ -89,7 +92,7 @@
         </widget>
        </item>
        <item row="0" column="0">
-        <widget class="QPushButton" name="pushButton_8">
+        <widget class="QPushButton" name="BtnSetTime">
          <property name="font">
           <font>
            <pointsize>8</pointsize>
@@ -101,7 +104,7 @@
         </widget>
        </item>
        <item row="2" column="0">
-        <widget class="QPushButton" name="pushButton_11">
+        <widget class="QPushButton" name="BtnDeleteFreqfile">
          <property name="font">
           <font>
            <pointsize>8</pointsize>
@@ -116,7 +119,7 @@
      </widget>
     </item>
     <item row="3" column="0" colspan="3">
-     <widget class="QGroupBox" name="groupBox">
+     <widget class="QGroupBox" name="GBHand">
       <property name="font">
        <font>
         <pointsize>10</pointsize>
@@ -127,7 +130,7 @@
       </property>
       <layout class="QGridLayout" name="gridLayout_2">
        <item row="0" column="0" colspan="2">
-        <widget class="QPushButton" name="pushButton_4">
+        <widget class="QPushButton" name="BtnSetCalTable">
          <property name="font">
           <font>
            <pointsize>8</pointsize>
@@ -139,7 +142,7 @@
         </widget>
        </item>
        <item row="0" column="2">
-        <widget class="QPushButton" name="pushButton_12">
+        <widget class="QPushButton" name="BtnDeleteCalTable">
          <property name="font">
           <font>
            <pointsize>8</pointsize>
@@ -151,7 +154,7 @@
         </widget>
        </item>
        <item row="1" column="2">
-        <widget class="QSpinBox" name="spinBox_3">
+        <widget class="QSpinBox" name="SpinDACValue">
          <property name="font">
           <font>
            <pointsize>8</pointsize>
@@ -160,7 +163,7 @@
         </widget>
        </item>
        <item row="2" column="2">
-        <widget class="QSpinBox" name="spinBox">
+        <widget class="QSpinBox" name="SpinRough">
          <property name="font">
           <font>
            <pointsize>8</pointsize>
@@ -169,7 +172,7 @@
         </widget>
        </item>
        <item row="3" column="2">
-        <widget class="QSpinBox" name="spinBox_2">
+        <widget class="QSpinBox" name="SpinFine">
          <property name="font">
           <font>
            <pointsize>8</pointsize>
@@ -178,7 +181,7 @@
         </widget>
        </item>
        <item row="1" column="0" colspan="2">
-        <widget class="QPushButton" name="pushButton_7">
+        <widget class="QPushButton" name="BtnSetDACValue">
          <property name="font">
           <font>
            <pointsize>8</pointsize>
@@ -190,7 +193,7 @@
         </widget>
        </item>
        <item row="2" column="0" colspan="2">
-        <widget class="QPushButton" name="pushButton_5">
+        <widget class="QPushButton" name="BtnSetRough">
          <property name="font">
           <font>
            <pointsize>8</pointsize>
@@ -202,7 +205,7 @@
         </widget>
        </item>
        <item row="3" column="0" colspan="2">
-        <widget class="QPushButton" name="pushButton_6">
+        <widget class="QPushButton" name="BtnSetFine">
          <property name="font">
           <font>
            <pointsize>8</pointsize>
