@@ -3,6 +3,10 @@ from loguru import logger
 import sys
 from dataclasses import *
 from PyQt5 import QtWidgets
+import Usbhost
+from typing import List
+
+wrong_answers = ['Bad data', "Unknown command", "No device port", 'Port error']
 
 def initiate_exception_logging():
     # generating our hook
@@ -29,8 +33,19 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         super().__init__()
         self.setupUi(self)
         self.state = State(state=0)
+        self.port = None
 
         self.set_hand_active()
+        self.scan_and_select()
+
+    def scan_and_select(self):
+        self.port = Usbhost.open_port(Usbhost.get_device_port())
+        answer: str = Usbhost.send_query(self.port, "GetAddr")
+        if answer in wrong_answers:
+            error_message(answer)
+        else:
+            devices: List[str] = answer.split()
+            self.CBDevices.addItems(devices)
 
     def set_hand_state(self, state: bool):
         """
@@ -83,6 +98,20 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         """
         states = {0: 'ручном', 1: "автоматическом"}
         self.LblDescr.setText("Выбрано устройство %s. Устройство работает в %s режиме" % (addr, states[state]))
+
+
+def error_message(text):
+    """
+    shows error window with text
+    :param text: error text
+    :return:
+    """
+    error = QtWidgets.QMessageBox()
+    error.setIcon(QtWidgets.QMessageBox.Critical)
+    error.setText(text)
+    error.setWindowTitle('Ошибка!')
+    error.setStandardButtons(QtWidgets.QMessageBox.Ok)
+    error.exec_()
 
 @logger.catch
 def main():

@@ -138,7 +138,7 @@ class Ui_MainWindow(object):
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "Синтезатор частот"))
-        self.LblDescr.setText(_translate("MainWindow", "<html><head/><body><p><span style=\" font-size:12pt;\">Выбрано устройство 1. Устройство работает в режиме ручного управления. </span></p></body></html>"))
+        self.LblDescr.setText(_translate("MainWindow", "<html><head/><body><p><span style=\" font-size:12pt;\">Устройство не выбрано</span></p></body></html>"))
         self.LblList.setText(_translate("MainWindow", "Список устройств:"))
         self.BtnRescan.setText(_translate("MainWindow", "Повторный поиск"))
         self.BtnChangState.setText(_translate("MainWindow", "Сменить режим"))
