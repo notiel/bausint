@@ -74,6 +74,15 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.set_hand_state(False)
         self.set_auto_state(True)
 
+    def set_descr_label(self, addr: str, state: int):
+        """
+        forms description label
+        :param addr: device address
+        :param state: 0 for hand and 1 for auto
+        :return:
+        """
+        states = {0: 'ручном', 1: "автоматическом"}
+        self.LblDescr.setText("Выбрано устройство %s. Устройство работает в %s режиме" % (addr, states[state]))
 
 @logger.catch
 def main():
