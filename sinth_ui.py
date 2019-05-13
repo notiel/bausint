@@ -85,7 +85,7 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         :return:
         """
         new_state = 0 if self.state.state == 1 else 1
-        answer = Usbhost.send_query(self.port, "SetState", new_state)
+        answer = Usbhost.send_query(self.port, "SetState", self.state.device, new_state)
         if answer in wrong_answers:
             error_message("Не удалось сменить состояние")
             self.statusbar.showMessage(answer_translate[answer])
@@ -97,6 +97,18 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 self.set_auto_active()
             if new_state == 0:
                 self.set_hand_active()
+
+    def clear_table(self):
+        """
+        clears table device
+        :return:
+        """
+        answer = Usbhost.send_command(self.port, "ClearCalibrTable", self.state.device)
+        if answer in wrong_answers:
+            error_message("Не удалось удалить таблицу калибровки")
+            self.statusbar.showMessage(answer_translate[answer])
+        else:
+            self.statusbar.clearMessage()
 
     def set_hand_state(self, state: bool):
         """
