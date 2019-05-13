@@ -28,13 +28,14 @@ def initiate_exception_logging():
 @dataclass
 class State:
     state: int = 0
+    device: str = ""
 
 
 class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
-        self.state = State(state=0)
+        self.state = State()
         self.port = None
 
         self.set_hand_active()
@@ -42,6 +43,7 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
 
         self.BtnRescan.clicked.connect(self.scan_and_select)
         self.BtnChangeDevice.clicked.connect(self.change_device)
+        self.BtnChangState.clicked.connect(self.change_state)
 
     def scan_and_select(self):
         self.BtnChangeDevice.setEnabled(False)
@@ -70,13 +72,31 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         if answer in wrong_answers:
             error_message("Не удалось сменить устройство")
             self.statusbar.showMessage(answer_translate[answer])
-        elif int(answer) not in (0, 1):
+        elif answer not in ("0", "1"):
             error_message("Ошибка статуса устройства")
         else:
+            self.state.device = device
             self.statusbar.clearMessage()
-            self.set_descr_label(device, int(answer))
+            self.set_descr_label(self.state.device, int(answer))
 
-
+    def change_state(self):
+        """
+        changes state of selected device
+        :return:
+        """
+        new_state = 0 if self.state.state == 1 else 1
+        answer = Usbhost.send_query(self.port, "SetState", new_state)
+        if answer in wrong_answers:
+            error_message("Не удалось сменить состояние")
+            self.statusbar.showMessage(answer_translate[answer])
+        else:
+            self.statusbar.clearMessage()
+            self.state.state = new_state
+            self.set_descr_label(self.state.device, self.state.state)
+            if new_state == 1:
+                self.set_auto_active()
+            if new_state == 0:
+                self.set_hand_active()
 
     def set_hand_state(self, state: bool):
         """
@@ -128,7 +148,8 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         :return:
         """
         states = {0: 'ручном', 1: "автоматическом"}
-        self.LblDescr.setText("Выбрано устройство %s. Устройство работает в %s режиме" % (addr, states[state]))
+        self.LblDescr.setText("Выбрано устройство %s. Устройство работает в %s режиме." % (addr, states[state]))
+        self.LblDescr.setStyleSheet("font-size: 12pt")
 
 
 def error_message(text):
