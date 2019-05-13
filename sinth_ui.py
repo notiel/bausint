@@ -10,6 +10,7 @@ wrong_answers = ['Bad data', "Unknown command", "No device port", 'Port error']
 answer_translate = {'Bad data': "Неверные данные", "Unknown command": 'Неизвестная команда',
                     "No device port": "Устройство не подключено", "Port error": "Ошибка порта"}
 
+
 def initiate_exception_logging():
     # generating our hook
     # Back up the reference to the exceptionhook
@@ -24,6 +25,7 @@ def initiate_exception_logging():
 
     # Set the exception hook to our wrapping function
     sys.excepthook = my_exception_hook
+
 
 @dataclass
 class State:
@@ -44,6 +46,8 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.BtnRescan.clicked.connect(self.scan_and_select)
         self.BtnChangeDevice.clicked.connect(self.change_device)
         self.BtnChangState.clicked.connect(self.change_state)
+        self.BtnDeleteCalTable.clicked.connect(self.clear_cal_table)
+        self.BtnSetDACValue.clicked.connect(self.set_dac_valur)
 
     def scan_and_select(self):
         self.BtnChangeDevice.setEnabled(False)
@@ -98,14 +102,28 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
             if new_state == 0:
                 self.set_hand_active()
 
-    def clear_table(self):
+    def clear_cal_table(self):
         """
         clears table device
         :return:
         """
-        answer = Usbhost.send_command(self.port, "ClearCalibrTable", self.state.device)
+        answer: str = Usbhost.send_command(self.port, "ClearCalibrTable", self.state.device)
         if answer in wrong_answers:
             error_message("Не удалось удалить таблицу калибровки")
+            self.statusbar.showMessage(answer_translate[answer])
+        else:
+            self.statusbar.clearMessage()
+
+    def set_dac_valur(self):
+        """
+        sends dac value to device
+        :return:
+        """
+        # to do граничные значения
+        dac_value: int = self.SpinDACValue.value()
+        answer = Usbhost.send_command(self.port, "SetDACValue", self.state.device, dac_value)
+        if answer in wrong_answers:
+            error_message("Не удалось задать значение ЦАП")
             self.statusbar.showMessage(answer_translate[answer])
         else:
             self.statusbar.clearMessage()
@@ -177,13 +195,14 @@ def error_message(text):
     error.setStandardButtons(QtWidgets.QMessageBox.Ok)
     error.exec_()
 
+
 @logger.catch
 def main():
     initiate_exception_logging()
     app = QtWidgets.QApplication(sys.argv)  # Новый экземпляр QApplication
     window = Synthetizer()  # Создаём объект класса
-    window.show()# Показываем окно
-    app.exec_()  # и запускаем приложение
+    window.show()
+    app.exec_()
 
 
 if __name__ == '__main__':
