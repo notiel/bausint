@@ -7,6 +7,8 @@ import Usbhost
 from typing import List
 
 wrong_answers = ['Bad data', "Unknown command", "No device port", 'Port error']
+answer_translate = {'Bad data': "Неверные данные", "Unknown command": 'Неизвестная команда',
+                    "No device port": "Устройство не подключено", "Port error": "Ошибка порта"}
 
 def initiate_exception_logging():
     # generating our hook
@@ -38,14 +40,25 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.set_hand_active()
         self.scan_and_select()
 
+        self.BtnRescan.clicked.connect(self.scan_and_select)
+
     def scan_and_select(self):
+        self.BtnChangeDevice.setEnabled(False)
+        self.CBDevices.clear()
         self.port = Usbhost.open_port(Usbhost.get_device_port())
         answer: str = Usbhost.send_query(self.port, "GetAddr")
         if answer in wrong_answers:
-            error_message(answer)
+            # error_message(answer)
+            self.statusbar.showMessage(answer_translate[answer])
         else:
             devices: List[str] = answer.split()
             self.CBDevices.addItems(devices)
+            if devices:
+                self.BtnChangeDevice.setEnabled(True)
+                self.statusbar.clearMessage()
+            else:
+                self.statusbar.showMessage("Устройства не найдены")
+
 
     def set_hand_state(self, state: bool):
         """
