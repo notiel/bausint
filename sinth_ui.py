@@ -41,6 +41,7 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.scan_and_select()
 
         self.BtnRescan.clicked.connect(self.scan_and_select)
+        self.BtnChangeDevice.clicked.connect(self.change_device)
 
     def scan_and_select(self):
         self.BtnChangeDevice.setEnabled(False)
@@ -58,6 +59,23 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 self.statusbar.clearMessage()
             else:
                 self.statusbar.showMessage("Устройства не найдены")
+
+    def change_device(self):
+        """
+        changes current device to selected
+        :return:
+        """
+        device = self.CBDevices.currentText()
+        answer = Usbhost.send_query(self.port, "GetState", device)
+        if answer in wrong_answers:
+            error_message("Не удалось сменить устройство")
+            self.statusbar.showMessage(answer_translate[answer])
+        elif int(answer) not in (0, 1):
+            error_message("Ошибка статуса устройства")
+        else:
+            self.statusbar.clearMessage()
+            self.set_descr_label(device, int(answer))
+
 
 
     def set_hand_state(self, state: bool):
