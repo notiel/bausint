@@ -5,6 +5,7 @@ from dataclasses import *
 from PyQt5 import QtWidgets
 import Usbhost
 from typing import List
+import csv
 
 wrong_answers = ['Bad data', "Unknown command", "No device port", 'Port error']
 answer_translate = {'Bad data': "Неверные данные", "Unknown command": 'Неизвестная команда',
@@ -45,7 +46,7 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
 
         self.command_dict = {self.BtnSetFine: "SetFreqFine", self.BtnDeleteCalTable: "SetCalibrTable",
                              self.BtnSetRough: "SetFreqRough", self.BtnSetDACValue: "SetDACValue"}
-        self.error_dict = {self.BtnSetFine: "Не удалось задать точную частоу",
+        self.error_dict = {self.BtnSetFine: "Не удалось задать точную частоту",
                            self.BtnDeleteCalTable: "Не удалось задать калибровочную таблицу",
                            self.BtnSetRough: "Не удалось задать частоту грубо",
                            self.BtnSetDACValue: "Не удалось задать значение ЦАП"}
@@ -59,6 +60,7 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.BtnSetDACValue.clicked.connect(self.send_command)
         self.BtnSetRough.clicked.connect(self.send_command)
         self.BtnSetFine.clicked.connect(self.send_command)
+        self.BtnSetCalTable.clicked.connect(self.set_cal_table)
 
     def scan_and_select(self):
         self.BtnChangeDevice.setEnabled(False)
@@ -125,6 +127,25 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.statusbar.showMessage(answer_translate[answer])
         else:
             self.statusbar.showMessage(self.result_dict[button])
+
+    def set_cal_table(self):
+        """
+        sends calibration table row by row
+        :return:
+        """
+        filename = QtWidgets.QFileDialog.getOpenFileName(self, 'Открыть', '.')[0]
+        if filename and filename.lower().endswith('.csv'):
+            with open(filename) as f:
+                data = csv.reader(f, encoding='uft-8', delimiter=',')
+                for row in data:
+                    answer = Usbhost.send_command(self.port, "SetCalibrTableRow", self.state.device, row[0], row[1])
+                    if answer in wrong_answers:
+                        error_message("Не удалось отправить строку, удаляем калибровочную таблицу")
+                        self.BtnDeleteCalTable.click()
+                        self.statusbar.showMessage(answer_translate[answer])
+                        return
+        else:
+            error_message("Файл не выбран или в формате .csv")
 
     def set_hand_state(self, state: bool):
         """
