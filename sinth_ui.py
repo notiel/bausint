@@ -47,7 +47,9 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.BtnChangeDevice.clicked.connect(self.change_device)
         self.BtnChangState.clicked.connect(self.change_state)
         self.BtnDeleteCalTable.clicked.connect(self.clear_cal_table)
-        self.BtnSetDACValue.clicked.connect(self.set_dac_valur)
+        self.BtnSetDACValue.clicked.connect(self.set_dac_value)
+        self.BtnSetRough.clicked.connect(self.set_freq_rough)
+        self.BtnSetFine.clicked.connect(self.set_freq_fine)
 
     def scan_and_select(self):
         self.BtnChangeDevice.setEnabled(False)
@@ -114,16 +116,44 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         else:
             self.statusbar.clearMessage()
 
-    def set_dac_valur(self):
+    def set_dac_value(self):
         """
         sends dac value to device
         :return:
         """
         # to do граничные значения
         dac_value: int = self.SpinDACValue.value()
-        answer = Usbhost.send_command(self.port, "SetDACValue", self.state.device, dac_value)
+        answer: str = Usbhost.send_command(self.port, "SetDACValue", self.state.device, dac_value)
         if answer in wrong_answers:
             error_message("Не удалось задать значение ЦАП")
+            self.statusbar.showMessage(answer_translate[answer])
+        else:
+            self.statusbar.clearMessage()
+
+    def set_freq_rough(self):
+        """
+        sets frequency roughly to selected device
+        :return:
+        """
+        # to do граничные значения
+        freq_rough: int = self.SpinRough.value()
+        answer: str = Usbhost.send_command(self.port, "SetFreqRough", self.state.device, freq_rough)
+        if answer in wrong_answers:
+            error_message("Не удалось задать грубо частоту")
+            self.statusbar.showMessage(answer_translate[answer])
+        else:
+            self.statusbar.clearMessage()
+
+    def set_freq_fine(self):
+        """
+        sets frequency fine to selected device
+        :return:
+        """
+        # to do граничные значения
+        freq_fine: int = self.SpinFine.value()
+        answer: str = Usbhost.send_command(self.port, "SetFreqFine", self.state.device, freq_fine)
+        if answer in wrong_answers:
+            error_message("Не удалось задать точную частоту")
             self.statusbar.showMessage(answer_translate[answer])
         else:
             self.statusbar.clearMessage()
