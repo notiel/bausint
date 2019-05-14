@@ -43,13 +43,22 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.set_hand_active()
         self.scan_and_select()
 
+        self.command_dict = {self.BtnSetFine: "SetFreqFine", self.BtnDeleteCalTable: "SetCalibrTable",
+                             self.BtnSetRough: "SetFreqRough", self.BtnSetDACValue: "SetDACValue"}
+        self.error_dict = {self.BtnSetFine: "Не удалось задать точную частоу",
+                           self.BtnDeleteCalTable: "Не удалось задать калибровочную таблицу",
+                           self.BtnSetRough: "Не удалось задать частоту грубо",
+                           self.BtnSetDACValue: "Не удалось задать значение ЦАП"}
+        self.result_dict = {self.BtnSetFine: "Точная частота задана", self.BtnDeleteCalTable: "Таблица удалена",
+                            self.BtnSetRough: "Частота задана грубо", self.BtnSetDACValue: "Задано значение ЦАП"}
+
         self.BtnRescan.clicked.connect(self.scan_and_select)
         self.BtnChangeDevice.clicked.connect(self.change_device)
         self.BtnChangState.clicked.connect(self.change_state)
-        self.BtnDeleteCalTable.clicked.connect(self.clear_cal_table)
-        self.BtnSetDACValue.clicked.connect(self.set_dac_value)
-        self.BtnSetRough.clicked.connect(self.set_freq_rough)
-        self.BtnSetFine.clicked.connect(self.set_freq_fine)
+        self.BtnDeleteCalTable.clicked.connect(self.send_command)
+        self.BtnSetDACValue.clicked.connect(self.send_command)
+        self.BtnSetRough.clicked.connect(self.send_command)
+        self.BtnSetFine.clicked.connect(self.send_command)
 
     def scan_and_select(self):
         self.BtnChangeDevice.setEnabled(False)
@@ -104,59 +113,18 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
             if new_state == 0:
                 self.set_hand_active()
 
-    def clear_cal_table(self):
+    def send_command(self):
         """
-        clears table device
+        sends command and shows status depending on sender
         :return:
         """
-        answer: str = Usbhost.send_command(self.port, "ClearCalibrTable", self.state.device)
+        button = self.sender()
+        answer: str = Usbhost.send_command(self.port, self.command_dict[button], self.state.device)
         if answer in wrong_answers:
-            error_message("Не удалось удалить таблицу калибровки")
+            error_message(self.error_dict[button])
             self.statusbar.showMessage(answer_translate[answer])
         else:
-            self.statusbar.clearMessage()
-
-    def set_dac_value(self):
-        """
-        sends dac value to device
-        :return:
-        """
-        # to do граничные значения
-        dac_value: int = self.SpinDACValue.value()
-        answer: str = Usbhost.send_command(self.port, "SetDACValue", self.state.device, dac_value)
-        if answer in wrong_answers:
-            error_message("Не удалось задать значение ЦАП")
-            self.statusbar.showMessage(answer_translate[answer])
-        else:
-            self.statusbar.clearMessage()
-
-    def set_freq_rough(self):
-        """
-        sets frequency roughly to selected device
-        :return:
-        """
-        # to do граничные значения
-        freq_rough: int = self.SpinRough.value()
-        answer: str = Usbhost.send_command(self.port, "SetFreqRough", self.state.device, freq_rough)
-        if answer in wrong_answers:
-            error_message("Не удалось задать грубо частоту")
-            self.statusbar.showMessage(answer_translate[answer])
-        else:
-            self.statusbar.clearMessage()
-
-    def set_freq_fine(self):
-        """
-        sets frequency fine to selected device
-        :return:
-        """
-        # to do граничные значения
-        freq_fine: int = self.SpinFine.value()
-        answer: str = Usbhost.send_command(self.port, "SetFreqFine", self.state.device, freq_fine)
-        if answer in wrong_answers:
-            error_message("Не удалось задать точную частоту")
-            self.statusbar.showMessage(answer_translate[answer])
-        else:
-            self.statusbar.clearMessage()
+            self.statusbar.showMessage(self.result_dict[button])
 
     def set_hand_state(self, state: bool):
         """
