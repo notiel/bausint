@@ -24,7 +24,6 @@ def initiate_exception_logging():
         # Call the normal Exception hook after
         sys._excepthook(exctype, value, traceback)
         # sys.exit(1)
-
     # Set the exception hook to our wrapping function
     sys.excepthook = my_exception_hook
 
@@ -46,22 +45,30 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.scan_and_select()
 
         self.command_dict = {self.BtnSetFine: "SetFreqFine", self.BtnDeleteCalTable: "SetCalibrTable",
-                             self.BtnSetRough: "SetFreqRough", self.BtnSetDACValue: "SetDACValue"}
+                             self.BtnSetRough: "SetFreqRough", self.BtnSetDACValue: "SetDACValue",
+                             self.BtnStop: "Stop", self.BtnDeleteFreqfile: "ClearFreqTable"}
         self.error_dict = {self.BtnSetFine: "Не удалось задать точную частоту",
                            self.BtnDeleteCalTable: "Не удалось задать калибровочную таблицу",
                            self.BtnSetRough: "Не удалось задать частоту грубо",
-                           self.BtnSetDACValue: "Не удалось задать значение ЦАП"}
+                           self.BtnSetDACValue: "Не удалось задать значение ЦАП",
+                           self.BtnStop: "Не удалось остановить эксперимент",
+                           self.BtnDeleteFreqfile: "Не удалось удалить файл эксперимента"}
         self.result_dict = {self.BtnSetFine: "Точная частота задана", self.BtnDeleteCalTable: "Таблица удалена",
-                            self.BtnSetRough: "Частота задана грубо", self.BtnSetDACValue: "Задано значение ЦАП"}
+                            self.BtnSetRough: "Частота задана грубо", self.BtnSetDACValue: "Задано значение ЦАП",
+                            self.BtnStop: "Эксперимент остановлен", self.BtnDeleteFreqfile: "Файл эксперимента удален"}
 
         self.BtnRescan.clicked.connect(self.scan_and_select)
         self.BtnChangeDevice.clicked.connect(self.change_device)
         self.BtnChangState.clicked.connect(self.change_state)
+        self.BtnSetCalTable.clicked.connect(self.set_cal_table)
         self.BtnDeleteCalTable.clicked.connect(self.send_command)
         self.BtnSetDACValue.clicked.connect(self.send_command)
         self.BtnSetRough.clicked.connect(self.send_command)
         self.BtnSetFine.clicked.connect(self.send_command)
-        self.BtnSetCalTable.clicked.connect(self.set_cal_table)
+        self.BtnSetTime.clicked.connect(self.set_current_time)
+        self.BtnSetFreqFile.clicked.connect(self.set_freq_table)
+        self.BtnDeleteFreqfile.clicked.connect(self.send_command)
+        self.BtnStop.clicked.connect(self.send_command)
 
     def scan_and_select(self):
         self.BtnChangeDevice.setEnabled(False)
@@ -145,7 +152,7 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
                         self.BtnDeleteCalTable.click()
                         self.statusbar.showMessage(answer_translate[answer])
                         return
-                self.statusbar.showMessage("Калибровочная таблица отправлнна")
+                self.statusbar.showMessage("Калибровочная таблица отправлена")
         else:
             error_message("Файл не выбран или в формате .csv")
             self.statusbar.clearMessage()
@@ -155,15 +162,41 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         sends current timr to selected device
         :return:
         """
-        now = now = datetime.datetime.now()
-        answer = Usbhost.send_command(self.port, "SetCurrentTime", now.year, now.month, now.day, now.hour, now.minute,
-                                      now.second, int(now.microsecond / 1000))
+        now = datetime.datetime.now()
+        answer = Usbhost.send_command(self.port, "SetCurrentTime", self.state.device, now.year, now.month, now.day,
+                                      now.hour, now.minute, now.second, int(now.microsecond / 1000))
         if answer in wrong_answers:
             error_message("Не удалось задать время")
             self.statusbar.showMessage(answer_translate[answer])
         else:
             self.statusbar.showMessage("Время задано")
 
+    def set_freq_table(self):
+        """
+        sends calibration table row by row
+        :return:
+        """
+        filename = QtWidgets.QFileDialog.getOpenFileName(self, 'Открыть', '.')[0]
+        if filename and filename.lower().endswith('.csv'):
+            with open(filename) as f:
+                data = csv.reader(f, encoding='uft-8', delimiter=',')
+                start_time = data[0]
+                answer = Usbhost.send_command(self.port, "SetStartTime", self.state.device, *start_time)
+                if answer in wrong_answers:
+                    error_message("Не удалось отправить файл эксперимента")
+                    self.statusbar.showMessage(answer_translate[answer])
+                else:
+                    for row in data[1:]:
+                        answer = Usbhost.send_command(self.port, "SetCalibrTableRow", self.state.device, *row)
+                        if answer in wrong_answers:
+                            error_message("Не удалось отправить строку, удаляем файл эксперимента")
+                            self.BtnDeleteFreqfile.click()
+                            self.statusbar.showMessage(answer_translate[answer])
+                            return
+                    self.statusbar.showMessage("Калибровочная таблица отправлена")
+        else:
+            error_message("Файл не выбран или в формате .csv")
+            self.statusbar.clearMessage()
 
     def set_hand_state(self, state: bool):
         """
