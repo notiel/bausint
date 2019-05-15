@@ -6,6 +6,7 @@ from PyQt5 import QtWidgets
 import Usbhost
 from typing import List
 import csv
+import datetime
 
 wrong_answers = ['Bad data', "Unknown command", "No device port", 'Port error']
 answer_translate = {'Bad data': "Неверные данные", "Unknown command": 'Неизвестная команда',
@@ -144,8 +145,25 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
                         self.BtnDeleteCalTable.click()
                         self.statusbar.showMessage(answer_translate[answer])
                         return
+                self.statusbar.showMessage("Калибровочная таблица отправлнна")
         else:
             error_message("Файл не выбран или в формате .csv")
+            self.statusbar.clearMessage()
+
+    def set_current_time(self):
+        """
+        sends current timr to selected device
+        :return:
+        """
+        now = now = datetime.datetime.now()
+        answer = Usbhost.send_command(self.port, "SetCurrentTime", now.year, now.month, now.day, now.hour, now.minute,
+                                      now.second, int(now.microsecond / 1000))
+        if answer in wrong_answers:
+            error_message("Не удалось задать время")
+            self.statusbar.showMessage(answer_translate[answer])
+        else:
+            self.statusbar.showMessage("Время задано")
+
 
     def set_hand_state(self, state: bool):
         """
