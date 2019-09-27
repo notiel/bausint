@@ -53,6 +53,15 @@
            <pointsize>10</pointsize>
           </font>
          </property>
+         <property name="minimum">
+          <number>-150000</number>
+         </property>
+         <property name="maximum">
+          <number>150000</number>
+         </property>
+         <property name="singleStep">
+          <number>500</number>
+         </property>
         </widget>
        </item>
        <item row="1" column="0" colspan="2">

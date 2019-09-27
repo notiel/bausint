@@ -36,6 +36,7 @@ class State:
     device_id: int = -1
     comport: str = ""
     ser = None
+    message = "Частотный преобразователь не подключен"
 
 
 class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
@@ -47,23 +48,32 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.UsbHost = UsbHost()
 
         # self.set_hand_active()
-        self.scan_and_select()
         self.statusbar.showMessage("Частотный преобразователь не подключен")
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.timerEvent)
         self.timer.start(1000)
 
         self.command_dict = {self.BtnSetFine: "SetFreqFine", self.BtnDeleteCalTable: "SetCalibrTable",
-                             self.BtnSetRough: "SetFreqRough", self.BtnSetDACValue: "SetDACValue",
-                             self.BtnStop: "Stop"}
-        self.error_dict = {self.BtnSetFine: "Не удалось задать точную частоту",
+                             self.BtnSetRough: "SetFreqRough", self.BtnSetDACValue: "Setac",
+                             self.BtnStop: "Stop", self.BtnL1: 'SyntL1', self.BtnL2: 'SyntL2', self.BtnL5: 'SyntL5',
+                             self.BtnAttenuate: "SetAtt"}
+        self.error_dict = {self.BtnSetFine: "Не удалось задать сдвиг точно",
                            self.BtnDeleteCalTable: "Не удалось удалить калибровочную таблицу",
-                           self.BtnSetRough: "Не удалось задать частоту грубо",
+                           self.BtnSetRough: "Не удалось задать сдвиг грубо",
                            self.BtnSetDACValue: "Не удалось задать значение ЦАП",
-                           self.BtnStop: "Не удалось остановить эксперимент"}
+                           self.BtnStop: "Не удалось остановить эксперимент",
+                           self.BtnL1: 'Не удалось задать частотный диапазон',
+                           self.BtnL2: 'Не удалось задать частотный диапазон',
+                           self.BtnL5: 'Не удалось задать частотный диапазон',
+                           self.BtnAttenuate: "Не удалось задать ослабленние выходного сигнала"}
         self.result_dict = {self.BtnSetFine: "Точная частота задана", self.BtnDeleteCalTable: "Таблица удалена",
                             self.BtnSetRough: "Частота задана грубо", self.BtnSetDACValue: "Задано значение ЦАП",
-                            self.BtnStop: "Эксперимент остановлен"}
+                            self.BtnStop: "Эксперимент остановлен", self.BtnL1: 'Выбран диапазон L1',
+                            self.BtnL2: 'Выбран диапазон L2', self.BtnL5: 'Выбран диапазон L5',
+                            self.BtnAttenuate: "Задано ослабление выходного сигнала"}
+
+        self.spins = {self.BtnAttenuate: self.SpinAttenuate, self.BtnSetRough: self.SpinRough,
+                      self.BtnSetFine: self.SpinFine, self.BtnSetDACValue: self.SpinDACValue}
 
         self.controls = [self.BtnConnect, self.BtnSyncro, self.BtnL1, self.BtnL2, self.BtnL5, self.BtnSetCalTable,
                          self.BtnDeleteCalTable, self.BtnAttenuate, self.SpinAttenuate, self.GBState, self.GBReg,
@@ -72,21 +82,32 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
 
         self.BtnRescan.clicked.connect(self.scan_and_select)
         self.BtnConnect.clicked.connect(self.change_device)
-
         self.BtnSyncro.clicked.connect(self.set_current_time)
+        self.BtnL1.clicked.connect(self.send_command)
+        self.BtnL2.clicked.connect(self.send_command)
+        self.BtnL5.clicked.connect(self.send_command)
+        self.BtnSetDACValue.clicked.connect(self.send_command_with_parameter)
+        self.BtnSetRough.clicked.connect(self.send_command_with_parameter)
+        self.BtnAttenuate.clicked.connect(self.send_command_with_parameter)
+
+        self.BtnSetFine.clicked.connect(self.send_command)
         self.BtnSetCalTable.clicked.connect(self.set_cal_table)
         self.BtnDeleteCalTable.clicked.connect(self.send_command)
-        self.BtnSetDACValue.clicked.connect(self.send_command)
-        self.BtnSetRough.clicked.connect(self.send_command)
-        self.BtnSetFine.clicked.connect(self.send_command)
         self.BtnSetFreqFile.clicked.connect(self.set_freq_table)
         self.BtnStop.clicked.connect(self.send_command)
 
+        self.scan_and_select()
+
     def scan_and_select(self):
+        self.set_controls_state(False)
+        if self.state.ser:
+            UsbHost.close_port(self.state.ser)
+        self.state.message = "Частотный преобразователь не подключен"
+        self.statusbar.showMessage(self.state.message)
         self.BtnConnect.setEnabled(False)
         self.CBDevices.clear()
         self.devices = UsbHost.get_all_device_ports_with_id()
-        self.CBDevices.addItems(self.devices.keys())
+        self.CBDevices.addItems([str(x) for x in self.devices.keys()])
         if self.devices.keys():
             self.BtnConnect.setEnabled(True)
             self.statusbar.clearMessage()
@@ -101,6 +122,7 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         if self.GBState.isEnabled():
             now = datetime.datetime.now()
             self.LblTimeVal.setText("%i:%i:%i" % (now.hour, now.minute, now.second))
+        self.statusbar.showMessage(self.state.message)
 
     def set_controls_state(self, state: bool):
         """
@@ -123,27 +145,48 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.statusbar.showMessage(answer_translate[answer])
         else:
             self.statusbar.showMessage(self.result_dict[button])
+            if button in [self.BtnL1, self.BtnL2, self.BtnL5]:
+                self.LblFreqVal.setText(button.text())
 
+    def send_command_with_parameter(self):
+        """
+        sends command with parameter and shows status depending on sender
+        :return:
+        """
+        button = self.sender()
+        spin = self.spins[button]
+        answer: str = self.UsbHost.send_command(self.state.ser, self.command_dict[button],
+                                                str(self.state.device_id), spin.value())
+        if answer in wrong_answers:
+            error_message(self.error_dict[button])
+            self.statusbar.showMessage(answer_translate[answer])
+        else:
+            self.statusbar.showMessage(self.result_dict[button])
+           
     def change_device(self):
         """
         changes current device to selected
         :return:
 .        """
+        if self.state.ser:
+            UsbHost.close_port(self.state.ser)
         device = self.CBDevices.currentText()
         if device:
-            comport = self.devices[device]
+            comport = self.devices[int(device)]
             self.state.ser = UsbHost.open_port(comport)
-            if not self.ser:
+            if not self.state.ser:
                 self.statusbar.showMessage("Выбранный порт более недоступен. Произведите повторный поиск")
                 return
-            answer: str = UsbHost.send_command(self.port, "ping", device)
+            answer: str = self.UsbHost.send_command(self.state.ser, "ping", device)
             if answer in wrong_answers:
                 error_message("Выбранный девайс не отвечает")
                 self.statusbar.showMessage("Выбранный порт более недоступен. Произведите повторный поиск")
                 return
-            self.state.device_id = device
+            self.state.device_id = int(device)
             self.state.comport = comport
-            self.statusbar.showMessage("Подключен частотный преобразователь %i через %s порт" % (device, comport))
+            self.state.message = "Подключен частотный преобразователь %i через %s порт. Время не синхронизировано" \
+                                 % (int(device), comport)
+            self.statusbar.showMessage(self.state.message)
             self.set_controls_state(True)
 
     # refactor
@@ -153,7 +196,7 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         :return:
         """
         new_state = 0 if self.state.state == 1 else 1
-        answer = UsbHost.send_query(self.port, "SetState", str(self.state.device_id), new_state)
+        answer = UsbHost.send_query(self.state.ser, "SetState", str(self.state.device_id), new_state)
         if answer in wrong_answers:
             error_message("Не удалось сменить состояние")
             self.statusbar.showMessage(answer_translate[answer])
@@ -176,7 +219,7 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
             with open(filename) as f:
                 data = csv.reader(f, encoding='uft-8', delimiter=',')
                 for row in data:
-                    answer = UsbHost.send_command(self.port, "SetCalibrTableRow",
+                    answer = UsbHost.send_command(self.state.ser, "SetCalibrTableRow",
                                                   str(self.state.device_id), row[0], row[1])
                     if answer in wrong_answers:
                         error_message("Не удалось отправить строку, удаляем калибровочную таблицу")
@@ -202,7 +245,8 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
             error_message("Не удалось задать время")
             self.statusbar.showMessage(answer_translate[answer])
         else:
-            self.statusbar.showMessage("Время задано")
+            self.state.message = self.state.message.split('.')[-1] + ". Время синхронизировано"
+            self.statusbar.showMessage(self.state.message)
 
     # refactor
     def set_freq_table(self):
@@ -221,7 +265,7 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
                     self.statusbar.showMessage(answer_translate[answer])
                 else:
                     for row in data[1:]:
-                        answer = UsbHost.send_command(self.port, "SetCalibrTableRow", str(self.state.device_id), *row)
+                        answer = UsbHost.send_command(self.state.ser, "SetCalibrTableRow", str(self.state.device_id), *row)
                         if answer in wrong_answers:
                             error_message("Не удалось отправить строку, удаляем файл эксперимента")
                             self.BtnDeleteFreqfile.click()

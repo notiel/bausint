@@ -68,7 +68,7 @@ class UsbHost:
         for comport in devices:
             try:
                 # find comport with our device
-                ser = serial.Serial(comport, timeout=0.2)
+                ser = serial.Serial(comport, timeout=0.2, baudrate=115200)
                 command: bytes = bytes("ping\r\n", encoding='utf-8')
                 ser.write(command)
                 answer: str = ser.readall().decode('utf-8')
@@ -90,7 +90,7 @@ class UsbHost:
         for comport in devices:
             try:
                 # find comport with our device
-                ser = serial.Serial(comport, timeout=0.2)
+                ser = serial.Serial(comport, timeout=0.2, baudrate=115200)
                 for device_id in range(1, max_id+1):
                     command: bytes = bytes("ping %i\r\n" % device_id, encoding='utf-8')
                     ser.write(command)
