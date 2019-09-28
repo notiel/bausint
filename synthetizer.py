@@ -54,14 +54,15 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.timer.start(1000)
 
         self.command_dict = {self.BtnSetFine: "SetFreqFine", self.BtnDeleteCalTable: "SetCalibrTable",
-                             self.BtnSetRough: "SetFreqRough", self.BtnSetDACValue: "Setac",
+                             self.BtnSetRough: "SetFreqRough", self.BtnSetDACValue: "SetDac",
                              self.BtnStop: "Stop", self.BtnL1: 'SyntL1', self.BtnL2: 'SyntL2', self.BtnL5: 'SyntL5',
-                             self.BtnAttenuate: "SetAtt"}
+                             self.BtnAttenuate: "SetAtt", self.BtnStart: "Start"}
         self.error_dict = {self.BtnSetFine: "Не удалось задать сдвиг точно",
                            self.BtnDeleteCalTable: "Не удалось удалить калибровочную таблицу",
                            self.BtnSetRough: "Не удалось задать сдвиг грубо",
                            self.BtnSetDACValue: "Не удалось задать значение ЦАП",
                            self.BtnStop: "Не удалось остановить эксперимент",
+                           self.BtnStop: "Не удалось начать эксперимент",
                            self.BtnL1: 'Не удалось задать частотный диапазон',
                            self.BtnL2: 'Не удалось задать частотный диапазон',
                            self.BtnL5: 'Не удалось задать частотный диапазон',
@@ -74,6 +75,12 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
 
         self.spins = {self.BtnAttenuate: self.SpinAttenuate, self.BtnSetRough: self.SpinRough,
                       self.BtnSetFine: self.SpinFine, self.BtnSetDACValue: self.SpinDACValue}
+
+        self.val_labels = {self.BtnAttenuate: self.LblAttVal, self.BtnSetRough: self.LblMoveVal,
+                           self.BtnSetDACValue: self.LblDacVal, self.BtnSetFine: None}
+
+        self.val_dimensions = {self.BtnAttenuate: " дБ", self.BtnSetRough: " Гц",
+                           self.BtnSetDACValue: " Гц", self.BtnSetFine: None}
 
         self.controls = [self.BtnConnect, self.BtnSyncro, self.BtnL1, self.BtnL2, self.BtnL5, self.BtnSetCalTable,
                          self.BtnDeleteCalTable, self.BtnAttenuate, self.SpinAttenuate, self.GBState, self.GBReg,
@@ -121,7 +128,7 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         """
         if self.GBState.isEnabled():
             now = datetime.datetime.now()
-            self.LblTimeVal.setText("%i:%i:%i" % (now.hour, now.minute, now.second))
+            self.LblTimeVal.setText("%02.i:%02.i:%02.i" % (now.hour, now.minute, now.second))
         self.statusbar.showMessage(self.state.message)
 
     def set_controls_state(self, state: bool):
@@ -132,6 +139,12 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         """
         for control in self.controls:
             control.setEnabled(state)
+        self.LblDacVal.setText("Неизвестно")
+        self.LblFreqVal.setText("L1")
+        self.LblStateVal.setText("Ручной")
+        self.LblMoveVal.setText("Гц")
+        self.LblResVal.setText("МГц")
+        self.LblAttVal.setText("дБ")
 
     def send_command(self):
         """
@@ -162,7 +175,9 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.statusbar.showMessage(answer_translate[answer])
         else:
             self.statusbar.showMessage(self.result_dict[button])
-           
+        if self.val_labels[button]:
+            self.val_labels[button].setText(str(spin.value()) + self.val_dimensions[button])
+
     def change_device(self):
         """
         changes current device to selected
@@ -188,6 +203,7 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
                                  % (int(device), comport)
             self.statusbar.showMessage(self.state.message)
             self.set_controls_state(True)
+            self.BtnAttenuate.click()
 
     # refactor
     def change_state(self):
@@ -239,8 +255,8 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         """
         now = datetime.datetime.now()
         answer = self.UsbHost.send_command(self.state.ser, "SetCurrentTime", str(self.state.device_id),
-                                      now.year, now.month, now.day,
-                                      now.hour, now.minute, now.second, int(now.microsecond / 1000))
+                                           now.year, now.month, now.day,
+                                           now.hour, now.minute, now.second, int(now.microsecond / 1000))
         if answer in wrong_answers:
             error_message("Не удалось задать время")
             self.statusbar.showMessage(answer_translate[answer])
@@ -265,7 +281,8 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
                     self.statusbar.showMessage(answer_translate[answer])
                 else:
                     for row in data[1:]:
-                        answer = UsbHost.send_command(self.state.ser, "SetCalibrTableRow", str(self.state.device_id), *row)
+                        answer = UsbHost.send_command(self.state.ser, "SetCalibrTableRow", str(self.state.device_id),
+                                                      *row)
                         if answer in wrong_answers:
                             error_message("Не удалось отправить строку, удаляем файл эксперимента")
                             self.BtnDeleteFreqfile.click()
