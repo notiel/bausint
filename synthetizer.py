@@ -1,5 +1,6 @@
 import design
 import sys
+import os
 from dataclasses import *
 from PyQt5 import QtWidgets, QtCore
 from Usbhost import UsbHost
@@ -30,12 +31,16 @@ def initiate_exception_logging():
     sys.excepthook = my_exception_hook
 
 
+states_dict = {"L1": [1575.42, 296.979], 'L2': [1227.60, 314.37], 'L5': [1176.45, 316.9275]}
+
+
 @dataclass
 class State:
     state: int = 0
     device_id: int = -1
     comport: str = ""
     ser = None
+    syncro = False
     message = "Частотный преобразователь не подключен"
 
 
@@ -45,6 +50,7 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.setupUi(self)
         self.state = State()
         self.devices: Dict[int, str] = dict()
+        self.calibr_table: Dict[int, str] = dict()
         self.UsbHost = UsbHost()
 
         # self.set_hand_active()
@@ -53,22 +59,21 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.timer.timeout.connect(self.timerEvent)
         self.timer.start(1000)
 
-        self.command_dict = {self.BtnSetFine: "SetFreqFine", self.BtnDeleteCalTable: "SetCalibrTable",
-                             self.BtnSetRough: "SetFreqRough", self.BtnSetDACValue: "SetDac",
+        self.command_dict = {self.BtnSetFine: "SetFreqFine", self.BtnSetRough: "SetFreqRough",
+                             self.BtnSetDACValue: "SetDac",
                              self.BtnStop: "Stop", self.BtnL1: 'SyntL1', self.BtnL2: 'SyntL2', self.BtnL5: 'SyntL5',
                              self.BtnAttenuate: "SetAtt", self.BtnStart: "Start"}
         self.error_dict = {self.BtnSetFine: "Не удалось задать сдвиг точно",
-                           self.BtnDeleteCalTable: "Не удалось удалить калибровочную таблицу",
                            self.BtnSetRough: "Не удалось задать сдвиг грубо",
                            self.BtnSetDACValue: "Не удалось задать значение ЦАП",
                            self.BtnStop: "Не удалось остановить эксперимент",
-                           self.BtnStop: "Не удалось начать эксперимент",
+                           self.BtnStart: "Не удалось начать эксперимент",
                            self.BtnL1: 'Не удалось задать частотный диапазон',
                            self.BtnL2: 'Не удалось задать частотный диапазон',
                            self.BtnL5: 'Не удалось задать частотный диапазон',
                            self.BtnAttenuate: "Не удалось задать ослабленние выходного сигнала"}
-        self.result_dict = {self.BtnSetFine: "Точная частота задана", self.BtnDeleteCalTable: "Таблица удалена",
-                            self.BtnSetRough: "Частота задана грубо", self.BtnSetDACValue: "Задано значение ЦАП",
+        self.result_dict = {self.BtnSetFine: "Точная частота задана", self.BtnSetRough: "Частота задана грубо",
+                            self.BtnSetDACValue: "Задано значение ЦАП",
                             self.BtnStop: "Эксперимент остановлен", self.BtnL1: 'Выбран диапазон L1',
                             self.BtnL2: 'Выбран диапазон L2', self.BtnL5: 'Выбран диапазон L5',
                             self.BtnAttenuate: "Задано ослабление выходного сигнала"}
@@ -80,10 +85,10 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
                            self.BtnSetDACValue: self.LblDacVal, self.BtnSetFine: None}
 
         self.val_dimensions = {self.BtnAttenuate: " дБ", self.BtnSetRough: " Гц",
-                           self.BtnSetDACValue: " Гц", self.BtnSetFine: None}
+                               self.BtnSetDACValue: "", self.BtnSetFine: None}
 
-        self.controls = [self.BtnConnect, self.BtnSyncro, self.BtnL1, self.BtnL2, self.BtnL5, self.BtnSetCalTable,
-                         self.BtnDeleteCalTable, self.BtnAttenuate, self.SpinAttenuate, self.GBState, self.GBReg,
+        self.controls = [self.BtnConnect, self.BtnSyncro, self.BtnL1, self.BtnL2, self.BtnL5,
+                         self.BtnAttenuate, self.SpinAttenuate, self.GBState, self.GBReg,
                          self.GBHand, self.BtnSetDACValue, self.SpinDACValue, self.BtnSetRough, self.SpinRough,
                          self.BtnSetFine, self.SpinFine, self.GBAuto, self.BtnSetFreqFile, self.BtnStart, self.BtnStop]
 
@@ -96,20 +101,23 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.BtnSetDACValue.clicked.connect(self.send_command_with_parameter)
         self.BtnSetRough.clicked.connect(self.send_command_with_parameter)
         self.BtnAttenuate.clicked.connect(self.send_command_with_parameter)
-
-        self.BtnSetFine.clicked.connect(self.send_command)
-        self.BtnSetCalTable.clicked.connect(self.set_cal_table)
-        self.BtnDeleteCalTable.clicked.connect(self.send_command)
-        self.BtnSetFreqFile.clicked.connect(self.set_freq_table)
-        self.BtnStop.clicked.connect(self.send_command)
+        self.BtnSetFine.clicked.connect(self.send_command_with_parameter)
+        self.BtnSetCalTable.clicked.connect(self.read_calibr_table)
+        # self.BtnDeleteCalTable.clicked.connect(self.send_command)
+        # self.BtnSetFreqFile.clicked.connect(self.set_freq_table)
+        # self.BtnStop.clicked.connect(self.send_command)
 
         self.scan_and_select()
+        if os.path.exists("Calibration_DAC.csv"):
+            self.set_calibr_table("Calibration_DAC.csv")
 
     def scan_and_select(self):
         self.set_controls_state(False)
         if self.state.ser:
             UsbHost.close_port(self.state.ser)
-        self.state.message = "Частотный преобразователь не подключен"
+        self.state = State()
+        self.statusbar.showMessage("Идет сканирование портов")
+        self.state.message = "Идет сканирование портов"
         self.statusbar.showMessage(self.state.message)
         self.BtnConnect.setEnabled(False)
         self.CBDevices.clear()
@@ -117,7 +125,7 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.CBDevices.addItems([str(x) for x in self.devices.keys()])
         if self.devices.keys():
             self.BtnConnect.setEnabled(True)
-            self.statusbar.clearMessage()
+            self.create_message()
         else:
             self.statusbar.showMessage("Устройства не найдены")
 
@@ -140,11 +148,15 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         for control in self.controls:
             control.setEnabled(state)
         self.LblDacVal.setText("Неизвестно")
-        self.LblFreqVal.setText("L1")
+        self.LblFreqVal.setText("-")
         self.LblStateVal.setText("Ручной")
-        self.LblMoveVal.setText("Гц")
-        self.LblResVal.setText("МГц")
-        self.LblAttVal.setText("дБ")
+        self.LblMoveVal.setText("0 Гц")
+        self.LblResVal.setText("Неизвестно")
+        self.LblAttVal.setText("Неизвестно")
+        self.SpinRough.setValue(0)
+        self.SpinFine.setValue(0)
+        self.SpinDACValue.setValue(0)
+        self.SpinAttenuate.setValue(30)
 
     def send_command(self):
         """
@@ -160,6 +172,8 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.statusbar.showMessage(self.result_dict[button])
             if button in [self.BtnL1, self.BtnL2, self.BtnL5]:
                 self.LblFreqVal.setText(button.text())
+                self.LblResVal.setText(str(states_dict[button.text()][0] +
+                                           self.SpinFine.value() + self.SpinRough.value()))
 
     def send_command_with_parameter(self):
         """
@@ -175,8 +189,16 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.statusbar.showMessage(answer_translate[answer])
         else:
             self.statusbar.showMessage(self.result_dict[button])
-        if self.val_labels[button]:
-            self.val_labels[button].setText(str(spin.value()) + self.val_dimensions[button])
+            if self.val_labels[button]:
+                self.val_labels[button].setText(str(spin.value()) + self.val_dimensions[button])
+            if button == self.BtnSetDACValue and self.calibr_table:
+                dac = round(self.SpinDACValue.value()/10) * 10
+                state = self.LblFreqVal.text()
+                self.SpinFine.setValue(self.calibr_table[dac]*states_dict[state][1])
+            self.LblMoveVal.setText(str(self.SpinFine.value() + self.SpinRough.value())
+                                    + self.val_dimensions[self.BtnSetRough])
+            self.LblResVal.setText(str(states_dict[self.LblFreqVal.text()][0] +
+                                       float(self.LblMoveVal.text().split()[0])))
 
     def change_device(self):
         """
@@ -199,11 +221,43 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 return
             self.state.device_id = int(device)
             self.state.comport = comport
-            self.state.message = "Подключен частотный преобразователь %i через %s порт. Время не синхронизировано" \
-                                 % (int(device), comport)
-            self.statusbar.showMessage(self.state.message)
+            self.create_message()
             self.set_controls_state(True)
+            self.BtnL1.click()
             self.BtnAttenuate.click()
+
+    def set_calibr_table(self, filename: str):
+        """
+        using given csv sets calibration table
+        :return:
+        """
+        try:
+            with open(filename, encoding='utf-8') as f:
+                data = list(csv.reader(f, delimiter=';'))
+                states_dict['L1'][1], states_dict['L2'][1], states_dict['L5'][1] = \
+                    float(data[0][0].replace(',', '.')), float(data[0][1].replace(',', '.')), \
+                    float(data[0][2].replace(',', '.'))
+                for row in data[1:]:
+                    self.calibr_table[int(row[0])] = float(row[1].replace(',', '.'))
+                self.SpinDACValue.setMinimum(min(self.calibr_table.keys()))
+                self.SpinDACValue.setMaximum(max(self.calibr_table.keys()))
+        except Exception as e:
+            print(e)
+            self.SpinDACValue.setMaximum(65535)
+            self.SpinDACValue.setMinimum(0)
+            self.calibr_table = dict()
+        self.create_message()
+
+    def read_calibr_table(self):
+        """
+        reads and creates calibration table row by row
+        :return:
+        """
+        filename = QtWidgets.QFileDialog.getOpenFileName(self, 'Открыть', '.')[0]
+        if filename and filename.lower().endswith('.csv'):
+            self.set_calibr_table(filename)
+        else:
+            error_message("Файл не выбран или в формате .csv")
 
     # refactor
     def change_state(self):
@@ -224,28 +278,25 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
             if new_state == 0:
                 self.set_hand_active()
 
-    # refactor
-    def set_cal_table(self):
+    def create_message(self):
         """
-        sends calibration table row by row
+        creates status message
         :return:
         """
-        filename = QtWidgets.QFileDialog.getOpenFileName(self, 'Открыть', '.')[0]
-        if filename and filename.lower().endswith('.csv'):
-            with open(filename) as f:
-                data = csv.reader(f, encoding='uft-8', delimiter=',')
-                for row in data:
-                    answer = UsbHost.send_command(self.state.ser, "SetCalibrTableRow",
-                                                  str(self.state.device_id), row[0], row[1])
-                    if answer in wrong_answers:
-                        error_message("Не удалось отправить строку, удаляем калибровочную таблицу")
-                        self.BtnDeleteCalTable.click()
-                        self.statusbar.showMessage(answer_translate[answer])
-                        return
-                self.statusbar.showMessage("Калибровочная таблица отправлена")
+        if self.state.ser and self.state.device_id != -1 and self.state.comport:
+            self.state.message = "Подключен частотный преобразователь %i через %s порт." \
+                                 % (self.state.device_id, self.state.comport)
+            if self.state.syncro:
+                self.state.message += " Время синхронизировано."
+            else:
+                self.state.message += " Время не синхронизировано."
         else:
-            error_message("Файл не выбран или в формате .csv")
-            self.statusbar.clearMessage()
+            self.state.message = "Частотный преобразователь не подключен."
+        if self.calibr_table:
+            self.state.message += " Калибровочная таблица загружена"
+        else:
+            self.state.message += " Калибровочная таблица не загружена"
+        self.statusbar.showMessage(self.state.message)
 
     # refactor
     def set_current_time(self):
@@ -261,82 +312,91 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
             error_message("Не удалось задать время")
             self.statusbar.showMessage(answer_translate[answer])
         else:
-            self.state.message = self.state.message.split('.')[-1] + ". Время синхронизировано"
-            self.statusbar.showMessage(self.state.message)
+            self.state.syncro = True
+            self.create_message()
 
     # refactor
-    def set_freq_table(self):
-        """
-        sends calibration table row by row
-        :return:
-        """
-        filename = QtWidgets.QFileDialog.getOpenFileName(self, 'Открыть', '.')[0]
-        if filename and filename.lower().endswith('.csv'):
-            with open(filename) as f:
-                data = csv.reader(f, encoding='uft-8', delimiter=',')
-                start_time = data[0]
-                answer = UsbHost.send_command(self.state.ser, "SetStartTime", str(self.state.device_id), *start_time)
-                if answer in wrong_answers:
-                    error_message("Не удалось отправить файл эксперимента")
-                    self.statusbar.showMessage(answer_translate[answer])
-                else:
-                    for row in data[1:]:
-                        answer = UsbHost.send_command(self.state.ser, "SetCalibrTableRow", str(self.state.device_id),
-                                                      *row)
-                        if answer in wrong_answers:
-                            error_message("Не удалось отправить строку, удаляем файл эксперимента")
-                            self.BtnDeleteFreqfile.click()
-                            self.statusbar.showMessage(answer_translate[answer])
-                            return
-                    self.statusbar.showMessage("Калибровочная таблица отправлена")
-        else:
-            error_message("Файл не выбран или в формате .csv")
-            self.statusbar.clearMessage()
+    # def set_freq_table(self):
+    #    """
+    #    sends calibration table row by row
+    #    :return:
+    #    """
+    #    filename = QtWidgets.QFileDialog.getOpenFileName(self, 'Открыть', '.')[0]
+    #    if filename and filename.lower().endswith('.csv'):
+    #        with open(filename) as f:
+    #            data = csv.reader(f, encoding='uft-8', delimiter=',')
+    #            start_time = data[0]
+    #            answer = UsbHost.send_command(self.state.ser, "SetStartTime", str(self.state.device_id), *start_time)
+    #            if answer in wrong_answers:
+    #                error_message("Не удалось отправить файл эксперимента")
+    #                self.statusbar.showMessage(answer_translate[answer])
+    #            else:
+    #                for row in data[1:]:
+    #                    answer = UsbHost.send_command(self.state.ser, "SetCalibrTableRow", str(self.state.device_id),
+    #                                                  *row)
+    #                    if answer in wrong_answers:
+    #                        error_message("Не удалось отправить строку, удаляем файл эксперимента")
+    #                        self.BtnDeleteFreqfile.click()
+    #                        self.statusbar.showMessage(answer_translate[answer])
+    #                        return
+    #                self.statusbar.showMessage("Калибровочная таблица отправлена")
+    #    else:
+    #        error_message("Файл не выбран или в формате .csv")
+    #        self.statusbar.clearMessage()
 
     # refactor
-    def set_hand_state(self, state: bool):
-        """
-        sets state status to all objects of hand mode
-        :param state: state of objects
-        :return:
-        """
-        self.BtnSetCalTable.setEnabled(state)
-        self.BtnDeleteCalTable.setEnabled(state)
-        self.BtnSetDACValue.setEnabled(state)
-        self.BtnSetFine.setEnabled(state)
-        self.BtnSetRough.setEnabled(state)
-        self.SpinDACValue.setEnabled(state)
-        self.SpinFine.setEnabled(state)
-        self.SpinRough.setEnabled(state)
+    # def set_hand_state(self, state: bool):
+    #    """
+    #    sets state status to all objects of hand mode
+    #    :param state: state of objects
+    #    :return:
+    #    """
+    #    self.BtnSetCalTable.setEnabled(state)
+    #    self.BtnDeleteCalTable.setEnabled(state)
+    #    self.BtnSetDACValue.setEnabled(state)
+    #    self.BtnSetFine.setEnabled(state)
+    #    self.BtnSetRough.setEnabled(state)
+    #    self.SpinDACValue.setEnabled(state)
+    #    self.SpinFine.setEnabled(state)
+    #    self.SpinRough.setEnabled(state)
 
     # refactor
-    def set_auto_state(self, state: bool):
-        """
-        sets state status to all objects of auto mode
-        :param state: state of objects
-        :return:
-        """
-        self.BtnSetFreqFile.setEnabled(state)
-        self.BtnStop.setEnabled(state)
-        self.BtnStart.setEnabled(state)
+    # def set_auto_state(self, state: bool):
+    #    """
+    #    sets state status to all objects of auto mode
+    #    :param state: state of objects
+    #    :return:
+    #    """
+    #    self.BtnSetFreqFile.setEnabled(state)
+    #    self.BtnStop.setEnabled(state)
+    #    self.BtnStart.setEnabled(state)
 
     # refactor
-    def set_hand_active(self):
-        """
-        sets hand mode to ui
-        :return:
-        """
-        self.set_auto_state(False)
-        self.set_hand_state(True)
+    # def set_hand_active(self):
+    #    """
+    #    sets hand mode to ui
+    #    :return:
+    #    """
+    #    self.set_auto_state(False)
+    #    self.set_hand_state(True)
 
     # refactor
-    def set_auto_active(self):
-        """
-        sets auto mode to ui
-        :return:
-        """
-        self.set_hand_state(False)
-        self.set_auto_state(True)
+    # def set_auto_active(self):
+    #    """
+    #    sets auto mode to ui
+    #    :return:
+    #    """
+    #    self.set_hand_state(False)
+    #    self.set_auto_state(True)
+
+    # answer = UsbHost.send_command(self.state.ser, "SetCalibrTableRow",
+    #                              str(self.state.device_id), row[0], row[1])
+    # if answer in wrong_answers:
+    #    error_message("Не удалось отправить строку, удаляем калибровочную таблицу")
+    #    self.BtnDeleteCalTable.click()
+    #    self.statusbar.showMessage(answer_translate[answer])
+    #    return
+    # self.statusbar.showMessage("Калибровочная таблица отправлена")
 
 
 def error_message(text):
