@@ -50,7 +50,7 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.setupUi(self)
         self.state = State()
         self.devices: Dict[int, str] = dict()
-        self.calibr_table: Dict[int, str] = dict()
+        self.calibr_table: Dict[int, float] = dict()
         self.UsbHost = UsbHost()
 
         # self.set_hand_active()
@@ -59,7 +59,7 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.timer.timeout.connect(self.timerEvent)
         self.timer.start(1000)
 
-        self.command_dict = {self.BtnSetFine: "SetFreqFine", self.BtnSetRough: "SetFreqRough",
+        self.command_dict = {self.BtnSetFine: "SetDac", self.BtnSetRough: "SetFreqRough",
                              self.BtnSetDACValue: "SetDac",
                              self.BtnStop: "Stop", self.BtnL1: 'SyntL1', self.BtnL2: 'SyntL2', self.BtnL5: 'SyntL5',
                              self.BtnAttenuate: "SetAtt", self.BtnStart: "Start"}
@@ -157,6 +157,9 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.SpinFine.setValue(0)
         self.SpinDACValue.setValue(0)
         self.SpinAttenuate.setValue(30)
+        if not self.calibr_table:
+            self.SpinFine.setEnabled(False)
+            self.BtnSetFine.setEnabled(False)
 
     def send_command(self):
         """
@@ -181,20 +184,28 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         :return:
         """
         button = self.sender()
-        spin = self.spins[button]
+        param = self.spins[button].value() if button != self.BtnSetFine else\
+            get_dac_value(self.SpinFine.value(), self.calibr_table, self.LblFreqVal.text())
+
         answer: str = self.UsbHost.send_command(self.state.ser, self.command_dict[button],
-                                                str(self.state.device_id), spin.value())
+                                                str(self.state.device_id), param)
         if answer in wrong_answers:
             error_message(self.error_dict[button])
             self.statusbar.showMessage(answer_translate[answer])
         else:
             self.statusbar.showMessage(self.result_dict[button])
             if self.val_labels[button]:
-                self.val_labels[button].setText(str(spin.value()) + self.val_dimensions[button])
+                self.val_labels[button].setText(str(self.spins[button].value()) + self.val_dimensions[button])
             if button == self.BtnSetDACValue and self.calibr_table:
                 dac = round(self.SpinDACValue.value()/10) * 10
                 state = self.LblFreqVal.text()
-                self.SpinFine.setValue(self.calibr_table[dac]*states_dict[state][1])
+                freq = self.calibr_table[dac]
+                k = states_dict[state][1]
+                self.SpinFine.setValue(freq*k)
+            if button == self.BtnSetFine and self.calibr_table:
+                dac = get_dac_value(self.SpinFine.value(), self.calibr_table, self.LblFreqVal.text())
+                self.SpinDACValue.setValue(dac)
+                self.LblDacVal.setText(str(dac))
             self.LblMoveVal.setText(str(self.SpinFine.value() + self.SpinRough.value())
                                     + self.val_dimensions[self.BtnSetRough])
             self.LblResVal.setText(str(states_dict[self.LblFreqVal.text()][0] +
@@ -256,6 +267,9 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         filename = QtWidgets.QFileDialog.getOpenFileName(self, 'Открыть', '.')[0]
         if filename and filename.lower().endswith('.csv'):
             self.set_calibr_table(filename)
+            if self.state.ser:
+                self.SpinFine.setEnabled(True)
+                self.BtnSetFine.setEnabled(True)
         else:
             error_message("Файл не выбран или в формате .csv")
 
@@ -411,6 +425,26 @@ def error_message(text):
     error.setWindowTitle('Ошибка!')
     error.setStandardButtons(QtWidgets.QMessageBox.Ok)
     error.exec_()
+
+
+def get_dac_value(fine_shift: int, table: Dict[int, float], state: str):
+    """
+    get dac value using calibration table
+    :param state: l1, l2 or l3
+    :param fine_shift: fine freq shift
+    :param table: table with calibration value of dac
+    :return: nearest dac value
+    """
+    if state not in ["L1", "L2", "L5"]:
+        return 0
+    shift_k = fine_shift/states_dict[state][1]
+    if shift_k <= table[min(table.keys())]:
+        return table[min(table.keys())]
+    if shift_k >= table[max(table.keys())]:
+        return table[max(table.keys())]
+    temp = [(abs(x[1] - shift_k), x[0]) for x in table.items()]
+    temp.sort(key=lambda x: x[0])
+    return temp[0][1]
 
 
 @logger.catch
