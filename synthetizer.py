@@ -9,10 +9,12 @@ import csv
 import datetime
 from loguru import logger
 
+import registers
+
 wrong_answers = ['Bad data', "Unknown command", "No device port", 'Port error']
 answer_translate = {'Bad data': "Неверные данные", "Unknown command": 'Неизвестная команда',
                     "No device port": "Устройство не подключено", "Port error": "Ошибка порта"}
-answer_codes = {'Ok': 'Ack 0', 'Unknown command' : 'Ack 6', 'Bad data': 'Ack 7'}
+answer_codes = {'Ok': 'Ack 0', 'Unknown command': 'Ack 6', 'Bad data': 'Ack 7'}
 
 logger.start("logfile.log", rotation="1 week", format="{time} {level} {message}", level="DEBUG", enqueue=True)
 
@@ -43,6 +45,7 @@ class State:
     ser = None
     syncro = False
     message = "Частотный преобразователь не подключен"
+    range: str = ""
 
 
 class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
@@ -64,6 +67,7 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
                              self.BtnSetDACValue: "SetDac",
                              self.BtnStop: "Stop", self.BtnL1: 'SyntL1', self.BtnL2: 'SyntL2', self.BtnL5: 'SyntL5',
                              self.BtnAttenuate: "SetAtt", self.BtnStart: "Start"}
+
         self.error_dict = {self.BtnSetFine: "Не удалось задать сдвиг точно",
                            self.BtnSetRough: "Не удалось задать сдвиг грубо",
                            self.BtnSetDACValue: "Не удалось задать значение ЦАП",
@@ -95,26 +99,29 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
 
         self.btns = {self.BtnL1: self.LblL1, self.BtnL2: self.LblL2, self.BtnL5: self.LblL5}
 
-        self.BtnRescan.clicked.connect(self.scan_and_select)
+        self.BtnRescan.clicked.connect(self.scan_ports)
         self.BtnConnect.clicked.connect(self.change_device)
         self.BtnSyncro.clicked.connect(self.set_current_time)
-        self.BtnL1.clicked.connect(self.send_command)
-        self.BtnL2.clicked.connect(self.send_command)
-        self.BtnL5.clicked.connect(self.send_command)
+        self.BtnL1.clicked.connect(self.send_reg_command)
+        self.BtnL2.clicked.connect(self.send_reg_command)
+        self.BtnL5.clicked.connect(self.send_reg_command)
+        self.BtnSetRough.clicked.connect(self.send_reg_command)
+
         self.BtnSetDACValue.clicked.connect(self.send_command_with_parameter)
-        self.BtnSetRough.clicked.connect(self.send_command_with_parameter)
         self.BtnAttenuate.clicked.connect(self.send_command_with_parameter)
         self.BtnSetFine.clicked.connect(self.send_command_with_parameter)
+
         self.BtnSetCalTable.clicked.connect(self.read_calibr_table)
+
         # self.BtnDeleteCalTable.clicked.connect(self.send_command)
         # self.BtnSetFreqFile.clicked.connect(self.set_freq_table)
         # self.BtnStop.clicked.connect(self.send_command)
 
-        self.scan_and_select()
+        self.scan_ports()
         if os.path.exists("Calibration_DAC.csv"):
             self.set_calibr_table("Calibration_DAC.csv")
 
-    def scan_and_select(self):
+    def scan_ports(self):
         self.set_controls_state(False)
         if self.state.ser:
             UsbHost.close_port(self.state.ser)
@@ -168,6 +175,49 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
             btn.setStyleSheet("")
             self.btns[btn].setStyleSheet("font: 16px")
 
+    def send_reg_command(self):
+        """
+        sends command to change state to l1, l2, l5
+        :return:
+        """
+        button = self.sender()
+        if button in self.btns.keys():
+            state: str = button.text()
+            move = None
+        else:
+            state = self.state.range
+            move = (self.SpinRough.value() // 500) * 500
+        param = registers.get_reg_str(state, move)
+        answer: str = self.UsbHost.send_command(self.state.ser, "SetAdf14", str(self.state.device_id),
+                                                param)
+        if answer == 'Ok':
+            self.statusbar.showMessage(self.result_dict[button])
+            # при установлении диапазона, он записывается в интерфейсе везде
+            if button in self.btn.keys():
+                self.state.range = button.text()
+                self.LblFreqVal.setText(button.text())
+                self.LblResVal.setText(str(states_dict[button.text()][0] +
+                                           self.SpinFine.value() + self.SpinRough.value()))
+                # все кнопки серые, кроме кнопки режима
+                for btn in self.btns.keys():
+                    btn.setStyleSheet("")
+                    self.btns[btn].setStyleSheet("font: 16px")
+                button.setStyleSheet("background-color : rgb(70, 210, 00)")
+                self.btns[button].setStyleSheet("color: red; font:  bold 16px")
+        else:
+            error_message(self.error_dict[button])
+            self.statusbar.showMessage(answer_translate[answer])
+
+        # add commands to log
+        param = registers.get_reg_str(state, move).replace(" ", '\n')
+        param.replace(" ", "\n")
+        self.create_log_message(button.text(), answer, param)
+
+        # set sw command
+        if answer == 'Ok' and button in self.btn.keys():
+            params = '0 1' if button == self.BtnL1 else "1 0"
+            self.set_sw(params)
+
     def send_command(self):
         """
         sends command and shows status depending on sender
@@ -177,26 +227,10 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         answer: str = self.UsbHost.send_command(self.state.ser, self.command_dict[button], str(self.state.device_id))
         if answer == 'Ok':
             self.statusbar.showMessage(self.result_dict[button])
-            if button in [self.BtnL1, self.BtnL2, self.BtnL5]:
-                self.LblFreqVal.setText(button.text())
-                self.LblResVal.setText(str(states_dict[button.text()][0] +
-                                           self.SpinFine.value() + self.SpinRough.value()))
-                self.BtnL1.setStyleSheet("background")
-            if button in self.btns.keys():
-                for btn in self.btns.keys():
-                    btn.setStyleSheet("")
-                    self.btns[btn].setStyleSheet("font: 16px")
-
-                button.setStyleSheet("background-color : rgb(70, 210, 00)")
-                self.btns[button].setStyleSheet("color: red; font:  bold 16px")
         else:
             error_message(self.error_dict[button])
             self.statusbar.showMessage(answer_translate[answer])
-
-        caption = self.TxtLog.toPlainText()
-        answer_log = answer_codes[answer] if answer in answer_codes.keys() else wrong_answers[answer]
-        self.TxtLog.setText(caption + ">> " + self.command_dict[button] + " " + str(self.state.device_id)+ '\n'
-                                + '<<' + answer_log + '\n')
+        self.create_log_message(self.command_dict[button], answer, "")
 
     def send_command_with_parameter(self):
         """
@@ -205,7 +239,7 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         """
         button = self.sender()
         param = self.spins[button].value() if button != self.BtnSetFine else\
-            get_dac_value(self.SpinFine.value(), self.calibr_table, self.LblFreqVal.text())
+            get_dac_value(self.SpinFine.value(), self.calibr_table, self.state.range)
 
         answer: str = self.UsbHost.send_command(self.state.ser, self.command_dict[button],
                                                 str(self.state.device_id), param)
@@ -215,31 +249,37 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         else:
             self.statusbar.showMessage(self.result_dict[button])
             try:
+                # добавляем размерность
                 if self.val_labels[button]:
                     self.val_labels[button].setText(str(self.spins[button].value()) + self.val_dimensions[button])
-                if button == self.BtnSetDACValue and self.calibr_table:
-                    dac = round(self.SpinDACValue.value()/10) * 10
-                    state = self.LblFreqVal.text()
-                    freq = self.calibr_table[dac]
-                    k = states_dict[state][1]
-                    self.SpinFine.setValue(freq*k)
-                if button == self.BtnSetFine and self.calibr_table:
-                    dac = get_dac_value(self.SpinFine.value(), self.calibr_table, self.LblFreqVal.text())
-                    self.SpinDACValue.setValue(dac)
-                    self.LblDacVal.setText(str(dac))
+                # устанавливаем зависимость цап и сдвига
+                self.set_fine_and_dac(button)
+                # пересчитываем значение сдвига
                 self.LblMoveVal.setText(str(self.SpinFine.value() + self.SpinRough.value())
                                         + self.val_dimensions[self.BtnSetRough])
-                state = self.LblFreqVal.text()
-                if state != "-":
-                    self.LblResVal.setText("%.4f MГц" % (states_dict[self.LblFreqVal.text()][0] +
+                # пересчитываем результирующую частоту
+                if self.state.range:
+                    self.LblResVal.setText("%.4f MГц" % (states_dict[self.state.range][0] +
                                            float(self.LblMoveVal.text().split()[0])/1000000))
             except KeyError:
                 pass
+        self.create_log_message(self.command_dict[button], answer,  str(param))
 
-        caption = self.TxtLog.toPlainText()
-        answer_log = answer_codes[answer] if answer in answer_codes.keys() else wrong_answers[answer]
-        self.TxtLog.setText(caption + ">> " + self.command_dict[button] + " " + str(self.state.device_id) +
-                            ' ' + str(param)+'\n' + '<< ' + answer_log + '\n')
+    def set_fine_and_dac(self, button):
+        """
+        updates fine shift fields if dac changed and vice versa
+        :param button: button pressed
+        :return:
+        """
+        if button == self.BtnSetDACValue and self.calibr_table:
+            dac = round(self.SpinDACValue.value() / 10) * 10
+            freq = self.calibr_table[dac]
+            k = states_dict[self.state.range][1]
+            self.SpinFine.setValue(freq * k)
+        if button == self.BtnSetFine and self.calibr_table:
+            dac = get_dac_value(self.SpinFine.value(), self.calibr_table, self.state.range)
+            self.SpinDACValue.setValue(dac)
+            self.LblDacVal.setText(str(dac))
 
     def change_device(self):
         """
@@ -268,6 +308,16 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.BtnAttenuate.click()
             self.SpinDACValue.setValue(35000)
             self.BtnSetDACValue.click()
+            self.set_sw("0 1")
+
+    def set_sw(self, params: str):
+        answer: str = self.UsbHost.send_command(self.state.ser, "SetSW", str(self.state.device_id), params)
+        if answer == 'Ok':
+            self.statusbar.showMessage("Команда SetSw сработала")
+        else:
+            error_message("Команда SetSw не сработала")
+            self.statusbar.showMessage("Команда SetSw не сработала")
+        self.create_log_message("SetSw", answer, params)
 
     def set_calibr_table(self, filename: str):
         """
@@ -305,25 +355,6 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         else:
             error_message("Файл не выбран или в формате .csv")
 
-    # refactor
-    def change_state(self):
-        """
-        changes state of selected device
-        :return:
-        """
-        new_state = 0 if self.state.state == 1 else 1
-        answer = UsbHost.send_query(self.state.ser, "SetState", str(self.state.device_id), new_state)
-        if answer in wrong_answers:
-            error_message("Не удалось сменить состояние")
-            self.statusbar.showMessage(answer_translate[answer])
-        else:
-            self.statusbar.clearMessage()
-            self.state.state = new_state
-            if new_state == 1:
-                self.set_auto_active()
-            if new_state == 0:
-                self.set_hand_active()
-
     def create_message(self):
         """
         creates status message
@@ -344,6 +375,16 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.state.message += " Калибровочная таблица не загружена"
         self.statusbar.showMessage(self.state.message)
 
+    def create_log_message(self, command: str, answer: str, params: str):
+        """
+        adds message to log
+        :return:
+        """
+        answer_log = answer_codes[answer] if answer in answer_codes.keys() else answer
+        caption = self.TxtLog.toPlainText()
+        self.TxtLog.setText(caption + ">> " + command + " " + str(self.state.device_id) + ' ' + params + '\n'
+                            + '<<' + answer_log + '\n')
+
     # refactor
     def set_current_time(self):
         """
@@ -360,6 +401,25 @@ class Synthetizer(QtWidgets.QMainWindow, design.Ui_MainWindow):
         else:
             self.state.syncro = True
             self.create_message()
+
+    # refactor
+    def change_state(self):
+        """
+        changes state of selected device
+        :return:
+        """
+        new_state = 0 if self.state.state == 1 else 1
+        answer = UsbHost.send_query(self.state.ser, "SetState", str(self.state.device_id), new_state)
+        if answer in wrong_answers:
+            error_message("Не удалось сменить состояние")
+            self.statusbar.showMessage(answer_translate[answer])
+        else:
+            self.statusbar.clearMessage()
+            self.state.state = new_state
+            if new_state == 1:
+                self.set_auto_active()
+            if new_state == 0:
+                self.set_hand_active()
 
     # refactor
     # def set_freq_table(self):
